@@ -3,7 +3,7 @@ import random
 try:
     import curses
 except ImportError:
-    print("Please run `pip install windows-curses` to use run this game.")
+    print("Please run `pip install windows-curses` to run this game.")
     exit(1)
 
 word_list: list[str] = None
@@ -14,7 +14,7 @@ with open("./word_list.txt", "r") as file:
     word_list = [x.strip() for x in words if x]
 
 game_word: str = None
-greeting = "Welcome to Hangman!"
+streak: int = 0
 game_text = """You have {chances} chances left to save the man!
     ______
     ||   |
@@ -22,9 +22,9 @@ game_text = """You have {chances} chances left to save the man!
     ||  342
     ||  1 0
 ____||_______
-
 Word: {word}
 Incorrect guesses = {incorrect_letters}
+Current streak: {streak}
 """
 
 chances: int = 6
@@ -41,6 +41,7 @@ def get_game_text() -> str:
         else:
             result = result.replace(str(i), get_symbol_for_number(i))
     result = result.replace("{chances}", str(chances))
+    result = result.replace("{streak}", str(streak))
     return result
 
 def get_symbol_for_number(num: int) -> str:
@@ -59,13 +60,13 @@ def get_symbol_for_number(num: int) -> str:
             return "\\"
 
 def get_display_word() -> str:
-    result = ""
+    letters = []
     for letter in game_word:
         if letter in all_guess_list:
-            result += letter
+            letters.append(letter)
         else:
-            result += "_"
-    return result
+            letters.append("_")
+    return " ".join(letters)
 
 class State(Enum):
     START = 0
@@ -82,13 +83,10 @@ def game_loop(stdscr):
         case State.START:
             handle_start()
         case State.PLAY:
-            draw_game_screen(stdscr, get_game_text())
             handle_midgame(stdscr)
         case State.WIN:
-            draw_game_screen(stdscr, get_game_text())
             handle_victory(stdscr)
         case State.LOSS:
-            draw_game_screen(stdscr, get_game_text())
             handle_loss(stdscr)
 
 def get_word_from_list():
@@ -104,6 +102,7 @@ def handle_start():
     current_state = State.PLAY
 
 def handle_midgame(stdscr):
+    draw_game_screen(stdscr, get_game_text())
     global current_state
     letter = get_letter_from_input(stdscr)
     letter_logic(letter)
@@ -113,15 +112,15 @@ def handle_midgame(stdscr):
         current_state = State.WIN
 
 def get_letter_from_input(stdscr):
-    draw_input_text(stdscr, "Press a letter and enter: ")
+    draw_input_text(stdscr, "Guess a letter.")
     letter = chr(stdscr.getch()).upper()
     while True:
         if not validate_letter(letter):
-            draw_input_text(stdscr, "Please enter a single valid letter from the english alphabet: ")
+            draw_input_text(stdscr, "Please enter a valid letter from the english alphabet.")
             letter = chr(stdscr.getch()).upper()
             continue
         if letter in all_guess_list:
-            draw_input_text(stdscr, f"The letter {letter} was already guessed. Pick a new letter: ")
+            draw_input_text(stdscr, f"The letter {letter} was already guessed. Pick a new letter.")
             letter = chr(stdscr.getch()).upper()
             continue
         break
@@ -148,54 +147,56 @@ def validate_letter(letter: str):
     return True
 
 def handle_victory(stdscr):
+    global streak
+    streak += 1
+    draw_game_screen(stdscr, get_game_text())
     draw_input_text(stdscr, "Yay! You saved him! He was responsible for killing 20 people, but oh well. Would you like to start a new game? (y/N)")
     response = chr(stdscr.getch()).lower()
-    while True:
-        if len(response) == 0 or response == "n":
-            exit(0)
-        if len(response) != 1 or response not in ["y", "n"]:
-            draw_input_text(stdscr, "Invalid response received. Either give a 'y' or 'n' or simply press enter: ")
-            response = chr(stdscr.getch()).lower()
-            continue
-        restart_game(stdscr)
-        break
+    if response == "y":
+        restart_game()
+    else:
+        exit(0)
 
-def restart_game(stdscr):
+def restart_game():
     global current_state
     current_state = State.START
 
 def handle_loss(stdscr):
-    draw_input_text(stdscr, "Aww, no worries, he was only a father of 5 small children... Would you like to start a new game? (y/N)")
-    response = chr(stdscr.getch())
-    while True:
-        if len(response) == 0 or response == "n":
-            exit(0)
-        if len(response) != 1 or response not in ["y", "n"]:
-            draw_input_text(stdscr, "Invalid response received. Either give a 'y' or 'n' or simply press enter: ")
-            response = chr(stdscr.getch())
-            continue
-        restart_game(stdscr)
-        break
-
-def draw_greeting(stdscr):
-    stdscr.addstr(0, 0, greeting)
+    global streak
+    streak = 0
+    draw_game_screen(stdscr, get_game_text())
+    draw_input_text(stdscr, f"The word was '{game_word}'. No worries, he was only a father of 5 small children... Would you like to start a new game? (y/N)")
+    response = chr(stdscr.getch()).lower()
+    if response == "y":
+        restart_game()
+    else:
+        exit(0)
 
 def draw_game_screen(stdscr, modified_game_text):
-    stdscr.addstr(1, 0, modified_game_text)
+    stdscr.addstr(3, 0, modified_game_text)
+    stdscr.addstr(0, 0, "Welcome to        ! A simple little game. ")
+    stdscr.addstr(0, 11, "Hangman", curses.color_pair(1))
+    stdscr.addstr(1, 0, 'Bored of the words? Change the word_list.txt and add as many words as you want!', curses.color_pair(2))
+    stdscr.addstr(2, 0, "Close the game by pressing `Ctrl+C`. Thanks for playing!", curses.color_pair(2))
 
 def draw_input_text(stdscr, input_text):
-    stdscr.addstr(12, 0, input_text)
+    stdscr.addstr(13, 0, input_text)
     stdscr.refresh()
 
 def main(stdscr):
     curses.curs_set(0)
     curses.start_color()
     curses.use_default_colors()
+    curses.init_pair(1, curses.COLOR_RED, -1)
+    curses.init_pair(2, 241, -1)
 
     stdscr.keypad(True)
     stdscr.nodelay(False)
-    while True:
-        game_loop(stdscr)
+    try:
+        while True:
+            game_loop(stdscr)
+    except KeyboardInterrupt:
+        exit(0)
 
 if __name__ == "__main__":
     curses.wrapper(main)
